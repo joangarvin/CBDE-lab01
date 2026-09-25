@@ -7,7 +7,7 @@ from nltk.tokenize import sent_tokenize
 from config import load_config
 
 # 1. Leer una parte del archivo de texto de BookCorpus.
-with open("data/books_large_p1.txt", "r", encoding="utf-8") as f: 
+with open("data/bookcorpus_10000_lineas.txt", "r", encoding="utf-8") as f:
     text = "".join(islice(f, 10_000)) # islice permet obtenir les 10000 primeres linies, .join les uneix a un text conjunt
 
 # 2. Dividir en chunks (párrafos) y frases.
