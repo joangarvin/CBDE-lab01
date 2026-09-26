@@ -3,37 +3,17 @@ import time
 from itertools import islice
 
 import psycopg2
-from nltk.tokenize import sent_tokenize
 from config import load_config
 
-# 1. Leer una parte del archivo de texto de BookCorpus.
+# 1. Leer directamente las primeras 10.000 frases del fichero (una por línea)
+frases = []
 with open("data/bookcorpus_10000_lineas.txt", "r", encoding="utf-8") as f:
-    text = "".join(islice(f, 10_000)) # islice permet obtenir les 10000 primeres linies, .join les uneix a un text conjunt
-
-# 2. Dividir en chunks (párrafos) y frases.
-chunks = []
-# text.split("\n\n") divideix el text on hi ha dos salts de linea seguits
-# chunk.strip() elimina salts de linea i espais
-for chunk in text.split("\n\n"):
-    limpio = chunk.strip()
-
-    if limpio:
-        chunks.append(limpio)
-
-rows = []
-
-for chunk_id, chunk in enumerate(chunks, 1):
-    frases = sent_tokenize(chunk, language="english")
-
-    for sentence in frases:
-        limpia = sentence.strip()
-
+    for line in islice(f, 10_000):
+        limpia = line.strip()
         if limpia:
-            rows.append((chunk_id, limpia))
+            frases.append((limpia,))  # Tupla de 1 elemento para psycopg2
 
-rows = rows[:10_000]
-
-if not rows:
+if not frases:
     raise ValueError("No se han encontrado frases.")
 
 # Crear taules i insertar a postgresSQL
@@ -43,10 +23,10 @@ TAM_LOTE = 100
 
 try:
     with conn.cursor() as cur:
+        # Creamos la tabla sin la columna chunk_id
         cur.execute("""
             CREATE TABLE IF NOT EXISTS book_sentences (
                 id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-                chunk_id INT,
                 sentence TEXT
             );
         """)
@@ -58,12 +38,12 @@ try:
         if cur.fetchone() is not None:
             raise ValueError("La tabla ya contiene datos, borrala primero")
 
-        for inicio in range(0, len(rows), TAM_LOTE):
-            lote = rows[inicio:inicio + TAM_LOTE]
+        for inicio in range(0, len(frases), TAM_LOTE):
+            lote = frases[inicio:inicio + TAM_LOTE]
             comienzo = time.perf_counter()
 
             cur.executemany(
-                "INSERT INTO book_sentences (chunk_id, sentence) VALUES (%s, %s);",
+                "INSERT INTO book_sentences (sentence) VALUES (%s);",
                 lote,
             )
             conn.commit()
@@ -72,7 +52,7 @@ finally:
     conn.close()
 
 # Mostrar les medicions
-print(f"Frases insertadas: {len(rows)}")
+print(f"Frases insertadas: {len(frases)}")
 print("Tiempos por lote de hasta 100 frases, incluyendo commit:")
 print(f"Mínimo: {min(tiempos):.6f} s")
 print(f"Máximo: {max(tiempos):.6f} s")
