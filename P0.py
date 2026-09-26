@@ -52,6 +52,12 @@ try:
         """)
         conn.commit()
 
+       # Mirar si la taula està buïda
+        cur.execute("SELECT 1 FROM book_sentences LIMIT 1")
+
+        if cur.fetchone() is not None:
+            raise ValueError("La tabla ya contiene datos, borrala primero")
+
         for inicio in range(0, len(rows), TAM_LOTE):
             lote = rows[inicio:inicio + TAM_LOTE]
             comienzo = time.perf_counter()
