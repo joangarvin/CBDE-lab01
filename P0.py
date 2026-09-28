@@ -7,7 +7,7 @@ from config import load_config
 
 # 1. Leer directamente las primeras 10.000 frases del fichero (una por línea)
 frases = []
-with open("data/bookcorpus_10000_lineas.txt", "r", encoding="utf-8") as f:
+with open("bookcorpus_10000_lineas.txt", "r", encoding="utf-8") as f:
     for line in islice(f, 10_000):
         limpia = line.strip()
         if limpia:
