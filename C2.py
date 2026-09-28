@@ -1,7 +1,7 @@
 import time
 import statistics
+import math
 import chromadb
-from chromadb.config import Settings
 import torch
 from sentence_transformers import SentenceTransformer
 
@@ -18,26 +18,57 @@ model = SentenceTransformer("all-MiniLM-L6-v2", device=device)
 try:
     collection_l2 = chroma_client.get_collection(name="book_corpus")
 except Exception as e:
-    raise RuntimeError("Error al obtener la colección. Ejecuta C0.py y C1_v2.py primero.") from e
+    raise RuntimeError("Error al obtener la colección. Ejecuta C0.py y C1.py primero.") from e
 
-# 3. Seleccionar 10 oraciones para las consultas[cite: 1, 4]
-sample_data = collection_l2.get(limit=10)
-sample_ids = sample_data["ids"]
-sample_docs = sample_data["documents"]
+# 3. Seleccionar los primeros 10 textos distintos, como en P2.
+# Los IDs de C0 (sent_0, sent_1, ...) indican el orden del corpus.
+sample_data = collection_l2.get(include=["documents"])
+ordered_docs = sorted(
+    zip(sample_data["ids"], sample_data["documents"]),
+    key=lambda item: int(item[0].split("_")[-1]),
+)
+sample_ids = []
+sample_docs = []
+seen = set()
+for sentence_id, doc in ordered_docs:
+    if doc not in seen:
+        sample_ids.append(sentence_id)
+        sample_docs.append(doc)
+        seen.add(doc)
+    if len(sample_docs) == 10:
+        break
 
 if len(sample_docs) < 10:
-    raise ValueError("Se requieren al menos 10 oraciones en la colección.")
+    raise ValueError("Se requieren al menos 10 textos diferentes en la colección.")
 
 print("=== 10 Oraciones Seleccionadas para las Consultas [C2] ===")
-for idx, doc in enumerate(sample_docs, 1):
-    print(f"{idx}. {doc}")
+for idx, (sentence_id, doc) in enumerate(zip(sample_ids, sample_docs), 1):
+    print(f"{idx}. ID {sentence_id}: {doc}")
 print("=" * 55 + "\n")
+
+def print_top2(results, query_id, query_doc, metric):
+    # Pedimos tres candidatos para poder excluir la propia frase por ID.
+    # No basta con descartar el primero: puede haber textos repetidos.
+    neighbors = [
+        (sentence_id, doc, distance)
+        for sentence_id, doc, distance in zip(
+            results["ids"][0], results["documents"][0], results["distances"][0]
+        )
+        if sentence_id != query_id
+    ][:2]
+
+    print(f"\nConsulta ID {query_id}: {query_doc}")
+    for sentence_id, doc, distance in neighbors:
+        # Chroma devuelve L2 al cuadrado; la raíz coincide con la euclídea de P2.
+        if metric == "l2":
+            distance = math.sqrt(max(0.0, distance))
+        print(f"  ID {sentence_id} | Distancia: {distance:.6f} | {doc}")
 
 # Pre-calcular los vectores de consulta (batch_size ajustado a 100)
 query_embeddings = model.encode(sample_docs, batch_size=100, show_progress_bar=False).tolist()
 
 # ---------------------------------------------------------
-# Métrica 1: Búsqueda usando L2 (Distancia Euclidiana)[cite: 1, 4]
+# Métrica 1: Búsqueda usando L2 (Distancia Euclidiana)
 # ---------------------------------------------------------
 times_l2 = []
 print("Calculando Top-2 usando Métrica 1 (L2 / Distancia Euclidiana)...")
@@ -47,16 +78,18 @@ for i in range(10):
     
     results = collection_l2.query(
         query_embeddings=[query_embeddings[i]],
-        n_results=3
+        n_results=3,
+        include=["documents", "distances"]
     )
     
     end_time = time.perf_counter()
     times_l2.append(end_time - start_time)
+    print_top2(results, sample_ids[i], sample_docs[i], "l2")
 
 # ---------------------------------------------------------
-# Métrica 2: Búsqueda usando Cosine Similarity[cite: 1, 4]
+# Métrica 2: Búsqueda usando distancia coseno (menor = más similar)
 # ---------------------------------------------------------
-print("\nPreparando Métrica 2 (Similitud Coseno). Clonando colección en lotes de 100...")
+print("\nPreparando Métrica 2 (Distancia Coseno). Clonando colección en lotes de 100...")
 try:
     chroma_client.delete_collection(name="book_corpus_cosine")
 except Exception:
@@ -82,18 +115,20 @@ for i in range(0, len(all_ids), batch_size):
     )
 
 times_cosine = []
-print("Calculando Top-2 usando Métrica 2 (Similitud Coseno)...")
+print("Calculando Top-2 usando Métrica 2 (Distancia Coseno)...")
 
 for i in range(10):
     start_time = time.perf_counter()
     
     results = collection_cosine.query(
         query_embeddings=[query_embeddings[i]],
-        n_results=3
+        n_results=3,
+        include=["documents", "distances"]
     )
     
     end_time = time.perf_counter()
     times_cosine.append(end_time - start_time)
+    print_top2(results, sample_ids[i], sample_docs[i], "cosine")
 
 # ---------------------------------------------------------
 # 4. Calcular métricas de tiempo
