@@ -1,6 +1,7 @@
 import time
 import statistics
 import chromadb
+from itertools import islice
 
 # 1. Configurar/Conectar cliente de Chroma
 # Se recomienda usar PersistentClient para mantener los datos almacenados en disco
@@ -25,15 +26,17 @@ collection = chroma_client.create_collection(
 def load_sentences(file_path, max_sentences=10_000):
     sentences = []
     with open(file_path, "r", encoding="utf-8") as f:
-        for line in f:
+        for line in islice(f, 10_000):
             limpia = line.strip()
             if limpia:
                 sentences.append(limpia)
                 if len(sentences) == max_sentences:
                     break
+    if not sentences:
+        raise ValueError("No se han encontrado frases.")
     return sentences
 
-sentences = load_sentences("books_large_p1.txt")
+sentences = load_sentences("bookcorpus_10000_lineas.txt")
 
 # 3. Insertar los textos en Chroma y medir tiempos de inserción
 insertion_times = []
