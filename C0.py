@@ -16,7 +16,7 @@ if not frases:
 
 
 #Crear el client de chroma
-chroma_client = chromadb.PersistentClient(path="./data/chroma_db")
+chroma_client = chromadb.PersistentClient(path="./chroma_db")
 
 #Crear collecció
 NOMBRE_COLECCION = "book_corpus"
